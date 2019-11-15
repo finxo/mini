@@ -1,8 +1,8 @@
 package mini
 
-/**
- * Check if running on android device / emulator or jvm
- */
+/*
+* Check if running on android device / emulator or jvm
+*/
 internal val isAndroid by lazy {
     try {
         android.os.Build.VERSION.SDK_INT != 0

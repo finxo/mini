@@ -32,17 +32,17 @@ open class Resource<out T> @PublishedApi internal constructor(val value: Any?) {
      * Get the current value if successful, or null for other cases.
      */
     fun getOrNull(): T? =
-        when {
-            isLoading -> (value as Loading<T>).value
-            isSuccess -> value as T?
-            else -> null
-        }
+            when {
+                isLoading -> (value as Loading<T>).value
+                isSuccess -> value as T?
+                else -> null
+            }
 
     fun exceptionOrNull(): Throwable? =
-        when (value) {
-            is Failure -> value.exception
-            else -> null
-        }
+            when (value) {
+                is Failure -> value.exception
+                else -> null
+            }
 
     companion object {
         fun <T> success(value: T): Resource<T> = Resource(value)
@@ -70,17 +70,19 @@ open class Resource<out T> @PublishedApi internal constructor(val value: Any?) {
 }
 
 /**
- * An empty resource that just abstracts asynchronous operation but with idle
+ * A resource that abstracts asynchronous operation but with idle
  * state instead of empty.
+ *
+ * It accepts temporary metadata objects as value.
  */
-class Task(value: Any?) : Resource<Unit>(value) {
+open class TypedTask<T> @PublishedApi internal constructor(value: Any?) : Resource<T>(value) {
     val isIdle: Boolean get() = isEmpty
 
     companion object {
-        fun success(): Task = Task(Unit)
-        fun idle(): Task = Task(Empty)
-        fun loading(): Task = Task(Loading<Unit>())
-        fun failure(exception: Throwable? = null): Task = Task(Failure(exception))
+        fun <T> success(value: T): TypedTask<T> = TypedTask(value)
+        fun <T> idle(): TypedTask<T> = TypedTask(Empty)
+        fun <T> loading(value: T? = null): TypedTask<T> = TypedTask(Loading(value))
+        fun <T> failure(exception: Throwable? = null): TypedTask<T> = TypedTask(Failure(exception))
     }
 
     override fun toString(): String {
@@ -89,6 +91,19 @@ class Task(value: Any?) : Resource<Unit>(value) {
             isIdle -> "Idle"
             else -> value.toString()
         }
+    }
+}
+
+/**
+ * An empty resource that just abstracts asynchronous operation but with idle
+ * state instead of empty.
+ */
+class Task(value: Any?) : TypedTask<Unit>(value) {
+    companion object {
+        fun success(): Task = Task(Unit)
+        fun idle(): Task = Task(Empty)
+        fun loading(): Task = Task(Loading<Unit>())
+        fun failure(exception: Throwable? = null): Task = Task(Failure(exception))
     }
 }
 
@@ -107,7 +122,7 @@ inline fun <T> Resource<T>.onLoading(crossinline action: (data: T?) -> Unit): Re
     return this
 }
 
-inline fun Task.onIdle(crossinline action: () -> Unit): Task {
+inline fun <T> TypedTask<T>.onIdle(crossinline action: () -> Unit): TypedTask<T> {
     if (isEmpty) action()
     return this
 }
@@ -120,6 +135,11 @@ inline fun <T> Resource<T>.onEmpty(crossinline action: () -> Unit): Resource<T> 
 inline fun <T, R> Resource<T>.map(crossinline transform: (data: T) -> R): Resource<R> {
     if (isSuccess) return Resource.success(transform(value as T))
     return Resource(value)
+}
+
+/** All resources completed, whether they're in success or failure state. */
+fun <T> Iterable<Resource<T>>.allTerminal(): Boolean {
+    return this.all { it.isTerminal }
 }
 
 /** All resources succeeded. */
@@ -139,6 +159,11 @@ fun <T> Iterable<Resource<T>>.anyLoading(): Boolean {
 
 /** Any resource empty */
 fun <T> Iterable<Resource<T>>.anyEmpty(): Boolean = this.any { it.isEmpty }
+
+fun <T> Iterable<Resource<T>>.onAllTerminal(fn: () -> Unit): Iterable<Resource<T>> {
+    if (this.allTerminal()) fn()
+    return this
+}
 
 fun <T> Iterable<Resource<T>>.onAllSuccessful(fn: () -> Unit): Iterable<Resource<T>> {
     if (this.allSuccesful()) fn()
@@ -161,3 +186,7 @@ fun <T> Iterable<Resource<T>>.onAnyEmpty(fn: () -> Unit): Iterable<Resource<T>> 
 }
 
 fun Iterable<Task>.onAnyIdle(fn: () -> Unit): Iterable<Task> = onAnyEmpty(fn).map { it as Task }
+
+/** Returns the first exception that can be found in a list of resources, null if it can't find any */
+fun <T> Iterable<Resource<T>>.firstExceptionOrNull() : Throwable? =
+        this.firstOrNull { it.isFailure && it.exceptionOrNull() != null }?.exceptionOrNull()

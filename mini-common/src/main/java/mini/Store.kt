@@ -21,8 +21,8 @@ abstract class Store<S> : Closeable {
         }
     }
 
+    internal val listeners = Vector<(S) -> Unit>()
     private var _state: Any? = NO_STATE
-    private val listeners = Vector<(S) -> Unit>()
 
     /** Set new state, equivalent to [asNewState]*/
     protected fun setState(state: S) {
@@ -71,7 +71,7 @@ abstract class Store<S> : Closeable {
     @Suppress("UNCHECKED_CAST")
     open fun initialState(): S {
         val type = (javaClass.genericSuperclass as ParameterizedType).actualTypeArguments[0]
-            as Class<S>
+                as Class<S>
         try {
             val constructor = type.getDeclaredConstructor()
             constructor.isAccessible = true

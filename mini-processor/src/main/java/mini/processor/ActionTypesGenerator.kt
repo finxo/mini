@@ -11,45 +11,47 @@ object ActionTypesGenerator {
     fun generate(container: TypeSpec.Builder, elements: Set<Element>) {
 
         val actionModels = elements.filter { Modifier.ABSTRACT !in it.modifiers }
-            .map { ActionModel(it) }
+                .map { ActionModel(it) }
 
         container.apply {
             val anyClassTypeName = KClass::class.asTypeName().parameterizedBy(STAR)
             val listTypeName = List::class.asTypeName().parameterizedBy(anyClassTypeName)
             val mapType = Map::class
-                .asClassName()
-                .parameterizedBy(anyClassTypeName, listTypeName)
+                    .asClassName()
+                    .parameterizedBy(anyClassTypeName, listTypeName)
 
             val prop = PropertySpec.builder("actionTypes", mapType)
-                .addModifiers(KModifier.PRIVATE)
-                //⇤⇥«»
-                .initializer(CodeBlock.builder()
-                    .add("mapOf(\n⇥")
-                    .apply {
-                        actionModels.forEach { actionModel ->
-                            val comma = if (actionModel != actionModels.last()) "," else ""
-                            add("«")
-                            add("%T::class to ", actionModel.typeName)
-                            add(actionModel.listOfSupertypesCodeBlock())
-                            add(comma)
-                            add("\n»")
-                        }
-                    }
-                    .add("⇤)")
-                    .build())
+                    .addModifiers(KModifier.PRIVATE)
+                    .initializer(CodeBlock.builder()
+                            .addStatement("mapOf(")
+                            .indent()
+                            .apply {
+                                actionModels.forEach { actionModel ->
+                                    val comma = if (actionModel != actionModels.last()) "," else ""
+                                    add("«") // Starts statement
+                                    add("%T::class to ", actionModel.typeName)
+                                    add(actionModel.listOfSupertypesCodeBlock())
+                                    add(comma)
+                                    add("\n")
+                                    add("»") // Ends statement
+                                }
+                            }
+                            .unindent()
+                            .add(")")
+                            .build())
             addProperty(prop.build())
         }.build()
     }
 }
 
-class ActionModel(val element: Element) {
-    val type = element.asType()
+private class ActionModel(element: Element) {
+    private val type = element.asType()
+    private val superTypes = collectTypes(type)
+            .sortedBy { it.depth }
+            // Ignore base types
+            .filter { it.mirror.qualifiedName() !in listOf("java.lang.Object", "masmini.BaseAction") }
     val typeName = type.asTypeName()
-    val superTypes = collectTypes(type)
-        .sortedBy { it.depth }
-        //Ignore base types
-        .filter { it.mirror.qualifiedName() != "java.lang.Object" }
-        .filter { it.mirror.qualifiedName() != "mini.BaseAction" }
+
 
     fun listOfSupertypesCodeBlock(): CodeBlock {
         val format = superTypes.joinToString(",\n") { "%T::class" }
@@ -58,16 +60,15 @@ class ActionModel(val element: Element) {
     }
 
     private fun collectTypes(mirror: TypeMirror, depth: Int = 0): Set<ActionSuperType> {
-        //We want to add by depth
+        // We want to add by depth
         val superTypes = typeUtils.directSupertypes(mirror).toSet()
-            .map { collectTypes(it, depth + 1) }
-            .flatten()
+                .map { collectTypes(it, depth + 1) }
+                .flatten()
         return setOf(ActionSuperType(mirror, depth)) + superTypes
     }
 
     class ActionSuperType(val mirror: TypeMirror, val depth: Int) {
-        val element = mirror.asElement()
-        val qualifiedName = element.qualifiedName()
+        val qualifiedName = mirror.asElement().qualifiedName()
 
         override fun equals(other: Any?): Boolean {
             if (this === other) return true
@@ -77,8 +78,6 @@ class ActionModel(val element: Element) {
             return true
         }
 
-        override fun hashCode(): Int {
-            return qualifiedName.hashCode()
-        }
+        override fun hashCode(): Int = qualifiedName.hashCode()
     }
 }

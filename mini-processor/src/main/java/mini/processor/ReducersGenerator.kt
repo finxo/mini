@@ -10,72 +10,75 @@ import javax.lang.model.element.Element
 import javax.lang.model.element.ExecutableElement
 
 object ReducersGenerator {
-
     fun generate(container: TypeSpec.Builder, elements: Set<Element>) {
         val reducers = elements.map { ReducerModel(it) }
-            .groupBy { it.containerName }
+                .groupBy { it.containerName }
 
         val reducerContainerType = Any::class.asTypeName()
         val reducerContainerListType = List::class.asTypeName().parameterizedBy(reducerContainerType)
 
-        val whenBlock = CodeBlock.builder()
-            .addStatement("val c = %T()", CompositeCloseable::class)
-            .addStatement("when (container) {").indent()
-            .apply {
-                reducers.forEach { (containerName, reducerFunctions) ->
-                    addStatement("is %T -> {", containerName).indent()
-                    reducerFunctions.forEach { function ->
-                        addStatement("c.add(dispatcher.subscribe<%T>(priority=%L) { container.%N(it) })",
-                            function.function.parameters[0].asType(), //Action type
-                            function.priority, //Priority
-                            function.function.simpleName //Function name
-                        )
+        val newDispatcherFn = FunSpec.builder("newDispatcher")
+                .returns(Dispatcher::class)
+                .addCode(CodeBlock.builder()
+                        .addStatement("return Dispatcher(actionTypes)")
+                        .build())
+                .build()
+
+        val subscribeSingleWhenBlock = CodeBlock.builder()
+                .addStatement("val c = %T()", CompositeCloseable::class)
+                .beginControlFlow("when (container)")
+                .apply {
+                    reducers.forEach { (containerName, reducerFunctions) ->
+                        beginControlFlow("is %T ->", containerName)
+                        reducerFunctions.forEach { function ->
+                            addStatement("c.add(dispatcher.subscribe<%T>(priority=%L) { container.%N(it) })",
+                                    function.function.parameters[0].asType(), //Action type
+                                    function.priority, //Priority
+                                    function.function.simpleName //Function name
+                            )
+                        }
+                        endControlFlow()
                     }
-                    unindent().addStatement("}")
                 }
-            }
-            .addStatement("else -> throw IllegalArgumentException(\"Container \$container has no reducers\")")
-            .unindent()
-            .addStatement("}") //Close when
-            .addStatement("return c")
-            .build()
+                .addStatement("else -> throw IllegalArgumentException(\"Container \$container has no reducers\")")
+                .endControlFlow()
+                .addStatement("return c")
+                .build()
 
-        val registerOneFn = FunSpec.builder("subscribe")
-            .addModifiers(KModifier.PRIVATE)
-            .addParameter("dispatcher", Dispatcher::class)
-            .addParameter("container", reducerContainerType)
-            .returns(Closeable::class)
-            .addCode(whenBlock)
-            .build()
+        val subscribeSingleFn = FunSpec.builder("subscribe")
+                .addModifiers(KModifier.PRIVATE)
+                .addParameters(listOf(
+                        ParameterSpec.builder("dispatcher", Dispatcher::class).build(),
+                        ParameterSpec.builder("container", reducerContainerType).build()
+                ))
+                .returns(Closeable::class)
+                .addCode(subscribeSingleWhenBlock)
+                .build()
 
-        val registerListFn = FunSpec.builder("subscribe")
-            .addParameter("dispatcher", Dispatcher::class)
-            .addParameter("containers", reducerContainerListType)
-            .returns(Closeable::class)
-            .addStatement("val c = %T()", CompositeCloseable::class)
-            .beginControlFlow("containers.forEach { container ->")
-            .addStatement("c.add(subscribe(dispatcher, container))")
-            .endControlFlow()
-            .addStatement("return c")
-            .build()
+        val subscribeListFn = FunSpec.builder("subscribe")
+                .addParameters(listOf(
+                        ParameterSpec.builder("dispatcher", Dispatcher::class).build(),
+                        ParameterSpec.builder("containers", reducerContainerListType).build()
+                ))
+                .returns(Closeable::class)
+                .addStatement("val c = %T()", CompositeCloseable::class)
+                .beginControlFlow("containers.forEach { container ->")
+                .addStatement("c.add(subscribe(dispatcher, container))")
+                .endControlFlow()
+                .addStatement("return c")
+                .build()
 
-        val initDispatcherFn = FunSpec.builder("newDispatcher")
-            .returns(Dispatcher::class)
-            .addCode(CodeBlock.builder()
-                .addStatement("return Dispatcher(actionTypes)")
-                .build())
-            .build()
-
-        container.addFunction(initDispatcherFn)
-        container.addFunction(registerOneFn)
-        container.addFunction(registerListFn)
-
+        with(container) {
+            addFunction(newDispatcherFn)
+            addFunction(subscribeSingleFn)
+            addFunction(subscribeListFn)
+        }
     }
 }
 
-class ReducerModel(val element: Element) {
+private class ReducerModel(element: Element) {
     val priority = element.getAnnotation(Reducer::class.java).priority
     val function = element as ExecutableElement
-    val container = element.enclosingElement.asType()
+    val container = element.enclosingElement.asType()!!
     val containerName = container.asTypeName()
 }

@@ -3,17 +3,15 @@ apply plugin: "kotlin-kapt"
 apply from: "../jitpack.gradle"
 
 dependencies {
-    implementation project(":mini-common")
-    implementation "com.google.auto:auto-common:0.10"
+    api project(":mini-common")
     implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk7:$kotlin_version"
-    implementation 'com.squareup:kotlinpoet:1.5.0'
+    implementation "com.squareup:kotlinpoet:1.7.2"
 
     // Lib to add incremental annotation processing
-    def incap_version = "0.2"
+    def incap_version = "0.3"
     compileOnly "net.ltgt.gradle.incap:incap:$incap_version"
     kapt "net.ltgt.gradle.incap:incap-processor:$incap_version"
-    implementation "net.ltgt.gradle.incap:incap-processor:0.2"
-    implementation "net.ltgt.gradle.incap:incap:0.2"
-    testImplementation "junit:junit:4.12"
-    testImplementation "com.google.testing.compile:compile-testing:0.15"
+
+    testImplementation "junit:junit:$junit_version"
+    testImplementation "com.google.testing.compile:compile-testing:0.19"
 }

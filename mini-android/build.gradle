@@ -26,12 +26,13 @@ dependencies {
     api project(":mini-common")
 
     api "org.jetbrains.kotlinx:kotlinx-coroutines-android:$coroutines_version"
-    api "androidx.appcompat:appcompat:1.1.0"
-    api "androidx.lifecycle:lifecycle-runtime-ktx:2.2.0"
+    api "androidx.appcompat:appcompat:1.2.0"
+    api "androidx.lifecycle:lifecycle-runtime-ktx:$lifecycle_version"
+    api "androidx.lifecycle:lifecycle-viewmodel-ktx:$lifecycle_version"
 
-    testImplementation "junit:junit:4.12"
-    androidTestImplementation "androidx.test:runner:1.2.0"
-    androidTestImplementation "androidx.test.espresso:espresso-core:3.2.0"
+    testImplementation "junit:junit:$junit_version"
+    androidTestImplementation "androidx.test:runner:1.3.0"
+    androidTestImplementation "androidx.test.espresso:espresso-core:3.3.0"
 }
 
 apply from: "../jitpack-android.gradle"
